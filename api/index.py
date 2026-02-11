@@ -330,7 +330,7 @@ def upload_salary():
 
 # Vercel Serverless Function入口
 def handler(event, context):
-    return app(event, context)
+    return app
 
 # 腾讯云函数入口（保留兼容）
 def main_handler(event, context):
