@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>工资管理 - 工资查询系统</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>工资管理</h1>
+            <p>上传工资Excel文件</p>
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for message in messages %}
+                        <div class="flash-message">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="/upload" enctype="multipart/form-data" class="query-form">
+            <div class="form-group">
+                <label for="month">月份</label>
+                <input type="month" id="month" name="month" required>
+            </div>
+
+            <div class="form-group">
+                <label for="file">选择Excel文件</label>
+                <input type="file" id="file" name="file" accept=".xlsx,.xls" required>
+                <p class="help-text">Excel文件需要包含"姓名"和"银行卡号"列，其他列会自动识别为工资项目</p>
+            </div>
+
+            <button type="submit" class="btn">上传工资数据</button>
+        </form>
+
+        <div class="footer">
+            <a href="/logout" class="admin-link">退出登录</a>
+            <a href="/" class="admin-link" style="margin-left: 20px;">返回首页</a>
+        </div>
+    </div>
+</body>
+</html>

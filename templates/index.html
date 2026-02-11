@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>工资查询系统</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>工资查询系统</h1>
+            <p>请输入您的姓名和银行卡号后6位进行查询</p>
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for message in messages %}
+                        <div class="flash-message">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="/query" class="query-form">
+            <div class="form-group">
+                <label for="name">姓名</label>
+                <input type="text" id="name" name="name" placeholder="请输入您的姓名" required>
+            </div>
+
+            <div class="form-group">
+                <label for="card_last6">银行卡号后6位</label>
+                <input type="text" id="card_last6" name="card_last6" 
+                       placeholder="请输入银行卡号后6位" maxlength="6" required>
+            </div>
+
+            <button type="submit" class="btn">查询工资</button>
+        </form>
+
+        <div class="footer">
+            <a href="/admin" class="admin-link">管理员入口</a>
+        </div>
+    </div>
+</body>
+</html>
