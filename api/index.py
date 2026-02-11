@@ -9,8 +9,8 @@ from datetime import datetime
 app = Flask(__name__, template_folder=os.path.join(os.path.dirname(__file__), '../templates'))
 app.secret_key = 'your_secret_key_here'  # 请修改为更复杂的密钥
 
-# 数据存储路径
-DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
+# 数据存储路径（使用Vercel可写的/tmp目录）
+DATA_DIR = '/tmp/salary_data'
 EMPLOYEES_FILE = os.path.join(DATA_DIR, 'employees.json')
 SALARY_FILE = os.path.join(DATA_DIR, 'salary_records.json')
 
