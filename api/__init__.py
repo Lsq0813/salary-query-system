@@ -6,16 +6,29 @@ import zipfile
 import xml.etree.ElementTree as ET
 from datetime import datetime
 
-app = Flask(__name__, template_folder=os.path.join(os.path.dirname(__file__), '../templates'))
-app.secret_key = 'your_secret_key_here'  # 请修改为更复杂的密钥
+app = Flask(__name__, 
+           template_folder=os.path.join(os.path.dirname(__file__), '../templates'),
+           static_folder=os.path.join(os.path.dirname(__file__), '../static'))
+# 从环境变量获取密钥，确保安全性
+app.secret_key = os.environ.get('SECRET_KEY', 'your_secret_key_here_change_in_production')
 
-# 数据存储路径（使用Vercel可写的/tmp目录）
-DATA_DIR = '/tmp/salary_data'
+# 数据存储路径（支持 Railway 持久化卷）
+# 在 Railway 上使用 /data 卷，本地使用项目目录
+DATA_DIR = os.environ.get('RAILWAY_VOLUME_MOUNT_PATH', os.path.join(os.path.dirname(__file__), 'data'))
 EMPLOYEES_FILE = os.path.join(DATA_DIR, 'employees.json')
 SALARY_FILE = os.path.join(DATA_DIR, 'salary_records.json')
 
+# 确保数据目录存在
 if not os.path.exists(DATA_DIR):
-    os.makedirs(DATA_DIR)
+    try:
+        os.makedirs(DATA_DIR)
+        print(f"创建数据目录: {DATA_DIR}")
+    except Exception as e:
+        print(f"创建目录失败: {e}，使用当前目录")
+        # 如果创建目录失败，使用当前目录作为备选
+        DATA_DIR = os.getcwd()
+        EMPLOYEES_FILE = os.path.join(DATA_DIR, 'employees.json')
+        SALARY_FILE = os.path.join(DATA_DIR, 'salary_records.json')
 
 # 初始化数据文件
 def init_data_files():
@@ -42,21 +55,49 @@ def format_number(value):
 
 # 员工数据操作
 def load_employees():
-    with open(EMPLOYEES_FILE, 'r', encoding='utf-8') as f:
-        return json.load(f)
+    try:
+        if not os.path.exists(EMPLOYEES_FILE):
+            return []
+        with open(EMPLOYEES_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"加载员工数据失败: {str(e)}, 路径: {EMPLOYEES_FILE}")
+        return []
 
 def save_employees(employees):
-    with open(EMPLOYEES_FILE, 'w', encoding='utf-8') as f:
-        json.dump(employees, f, ensure_ascii=False, indent=2)
+    try:
+        # 确保目录存在
+        os.makedirs(os.path.dirname(EMPLOYEES_FILE), exist_ok=True)
+        with open(EMPLOYEES_FILE, 'w', encoding='utf-8') as f:
+            json.dump(employees, f, ensure_ascii=False, indent=2)
+        print(f"保存员工数据成功: {len(employees)} 条记录, 路径: {EMPLOYEES_FILE}")
+        return True
+    except Exception as e:
+        print(f"保存员工数据失败: {str(e)}, 路径: {EMPLOYEES_FILE}")
+        return False
 
 # 工资记录操作
 def load_salary_records():
-    with open(SALARY_FILE, 'r', encoding='utf-8') as f:
-        return json.load(f)
+    try:
+        if not os.path.exists(SALARY_FILE):
+            return []
+        with open(SALARY_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"加载工资记录失败: {str(e)}, 路径: {SALARY_FILE}")
+        return []
 
 def save_salary_records(records):
-    with open(SALARY_FILE, 'w', encoding='utf-8') as f:
-        json.dump(records, f, ensure_ascii=False, indent=2)
+    try:
+        # 确保目录存在
+        os.makedirs(os.path.dirname(SALARY_FILE), exist_ok=True)
+        with open(SALARY_FILE, 'w', encoding='utf-8') as f:
+            json.dump(records, f, ensure_ascii=False, indent=2)
+        print(f"保存工资记录成功: {len(records)} 条记录, 路径: {SALARY_FILE}")
+        return True
+    except Exception as e:
+        print(f"保存工资记录失败: {str(e)}, 路径: {SALARY_FILE}")
+        return False
 
 # 纯Python读取Excel (仅支持xlsx格式，使用标准库)
 def read_xlsx(file_path):
@@ -80,13 +121,25 @@ def read_xlsx(file_path):
                 'r': 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
             }
             
+            # 辅助函数：从单元格引用中提取列名
+            def get_column_name(cell_ref):
+                # 提取列名部分（如从'A1'提取'A'，从'AA12'提取'AA'）
+                col_name = ''
+                for char in cell_ref:
+                    if char.isalpha():
+                        col_name += char
+                    else:
+                        break
+                return col_name
+            
             # 获取所有单元格数据
             cells = {}
             for row in root.findall('.//main:row', ns):
                 row_num = int(row.get('r', '1'))
                 cells[row_num] = {}
                 for cell in row.findall('.//main:c', ns):
-                    col = cell.get('r', 'A')[0]  # 获取列名 (A, B, C...)
+                    cell_ref = cell.get('r', 'A1')
+                    col = get_column_name(cell_ref)  # 获取完整列名 (A, B, AA, AB...)
                     cell_value = ''
                     
                     # 检查单元格类型
@@ -117,15 +170,30 @@ def read_xlsx(file_path):
             if not cells:
                 return [], []
             
-            # 获取最大行列
+            # 获取最大行
             max_row = max(cells.keys())
-            max_col = ord(max(max(row.keys()) for row in cells.values()))
+            
+            # 收集所有实际存在的列名并排序
+            all_columns = set()
+            for row in cells.values():
+                all_columns.update(row.keys())
+            
+            # 按Excel列顺序排序（A, B, ..., Z, AA, AB, ...）
+            def sort_columns(cols):
+                def col_key(col):
+                    # 将列名转换为数字以便排序
+                    num = 0
+                    for char in col:
+                        num = num * 26 + (ord(char.upper()) - ord('A') + 1)
+                    return num
+                return sorted(cols, key=col_key)
+            
+            sorted_columns = sort_columns(all_columns)
             
             # 读取表头
             headers = []
             if 1 in cells:
-                for col_idx in range(ord('A'), max_col + 1):
-                    col = chr(col_idx)
+                for col in sorted_columns:
                     headers.append(cells[1].get(col, '').strip())
             
             # 读取数据
@@ -134,7 +202,7 @@ def read_xlsx(file_path):
                 if row_num in cells:
                     row_data = {}
                     for col_idx, header in enumerate(headers):
-                        col = chr(ord('A') + col_idx)
+                        col = sorted_columns[col_idx]
                         row_data[header] = cells[row_num].get(col, '')
                     data.append(row_data)
             
@@ -144,25 +212,38 @@ def read_xlsx(file_path):
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    # 获取所有已上传的月份（去重并排序）
+    records = load_salary_records()
+    available_months = sorted(set(record['month'] for record in records), reverse=True)
+    return render_template('index.html', available_months=available_months)
 
 @app.route('/query', methods=['POST'])
 def query_salary():
     name = request.form.get('name', '').strip()
     card_last6 = request.form.get('card_last6', '').strip()
+    month = request.form.get('month', '').strip()
     
-    if not name or not card_last6:
-        flash('请输入姓名和银行卡号后6位')
+    if not name or not card_last6 or not month:
+        flash('请输入姓名、银行卡号后6位和选择月份')
         return redirect(url_for('index'))
+    
+    # 显示查询信息和数据存储路径
+    print(f"查询请求 - 姓名: {name}, 卡号后6位: {card_last6}, 月份: {month}")
+    print(f"数据存储路径: {DATA_DIR}")
+    print(f"员工数据文件: {EMPLOYEES_FILE}")
+    print(f"工资记录文件: {SALARY_FILE}")
     
     # 加载员工数据
     employees = load_employees()
+    print(f"加载到的员工数: {len(employees)}")
     
     # 查找员工
     employee = None
     for emp in employees:
+        print(f"员工: {emp['name']}, 卡号后6位: {emp['card_last6']}")
         if emp['name'] == name and emp['card_last6'] == card_last6:
             employee = emp
+            print(f"找到匹配员工: {employee}")
             break
     
     if not employee:
@@ -171,22 +252,59 @@ def query_salary():
     
     # 加载工资记录
     records = load_salary_records()
+    print(f"加载到的工资记录数: {len(records)}")
     
-    # 过滤该员工的工资记录
-    salary_list = []
+    # 打印所有工资记录
+    for i, record in enumerate(records):
+        print(f"工资记录 {i+1}: 员工ID: {record['employee_id']}, 月份: {record['month']}")
+    
+    # 过滤该员工的特定月份工资记录
+    employee_salary_data = None
     for record in records:
-        if record['employee_id'] == employee['id']:
-            salary_list.append({
-                'month': record['month'],
-                'data': record['salary_data']
-            })
+        if record['employee_id'] == employee['id'] and record['month'] == month:
+            employee_salary_data = record['salary_data']
+            print(f"找到匹配的工资记录: {record}")
+            break
     
-    # 按月份倒序排序
-    salary_list.sort(key=lambda x: x['month'], reverse=True)
+    if not employee_salary_data:
+        flash(f'未找到该员工{month}月份的工资记录')
+        print(f"未找到工资记录 - 员工ID: {employee['id']}, 月份: {month}")
+        return redirect(url_for('index'))
     
+    # 获取该月份所有员工的工资项目并集（统一显示所有项目）
+    # 使用第一个记录的列顺序作为基准顺序
+    base_columns = []
+    all_salary_items = set()
+    for record in records:
+        if record['month'] == month:
+            if not base_columns and 'salary_columns' in record:
+                base_columns = record['salary_columns']
+            all_salary_items.update(record['salary_data'].keys())
+    
+    # 过滤掉不需要显示的项目
+    filtered_items = {item for item in all_salary_items if item not in ['序号']}
+    
+    # 构建最终的项目顺序：先按原始列顺序，再添加其他项目
+    salary_items = []
+    # 1. 先添加原始列顺序中的项目
+    for col in base_columns:
+        if col in filtered_items and col not in ['序号']:
+            salary_items.append(col)
+            filtered_items.discard(col)
+    # 2. 添加剩余的项目（按原始顺序）
+    salary_items.extend(sorted(filtered_items))
+    
+    # 构建完整的工资数据，缺失的项目显示为 "-"
+    complete_salary_data = {}
+    for item in salary_items:
+        complete_salary_data[item] = employee_salary_data.get(item, '-')
+    
+    print(f"查询成功 - 找到工资记录，包含 {len(complete_salary_data)} 个项目")
+    print(f"工资项目: {list(complete_salary_data.keys())}")
     return render_template('result.html', 
                            employee_name=name,
-                           salary_list=salary_list)
+                           month=month,
+                           salary_data=complete_salary_data)
 
 @app.route('/admin')
 def admin():
@@ -226,7 +344,7 @@ def upload_salary():
         return redirect(url_for('admin'))
     
     file = request.files['file']
-    month = request.form.get('month', '').strip()
+    month = request.form.get('month_value', '').strip()
     
     if file.filename == '':
         flash('请选择文件')
@@ -298,30 +416,58 @@ def upload_salary():
             else:
                 employee_id = employee_id_map[key]
             
-            # 构建工资数据
+            # 构建工资数据 - 保存所有项目（包括值为0或空的），保持原始列顺序
             salary_dict = {}
+            salary_columns = []  # 保存列顺序
             for col in headers:
                 if col not in ['姓名', '银行卡号']:
+                    salary_columns.append(col)
                     value = row.get(col)
+                    # 即使值为空或0，也保存项目名称，显示为 "-" 或 "0"
                     if value is not None and value != '':
                         salary_dict[col] = format_number(value)
+                    else:
+                        salary_dict[col] = '-'
             
             # 添加工资记录
             new_record = {
                 'id': len(records) + 1,
                 'employee_id': employee_id,
                 'month': month,
-                'salary_data': salary_dict
+                'salary_data': salary_dict,
+                'salary_columns': salary_columns  # 保存列顺序
             }
             records.append(new_record)
             
             processed_count += 1
         
         # 保存数据
-        save_employees(employees)
-        save_salary_records(records)
-        
-        flash(f'成功上传 {processed_count} 条工资记录，月份：{month}')
+        try:
+            # 显示当前数据存储路径
+            print(f"当前数据存储路径: {DATA_DIR}")
+            print(f"员工数据文件: {EMPLOYEES_FILE}")
+            print(f"工资记录文件: {SALARY_FILE}")
+            
+            # 保存员工数据
+            emp_save_success = save_employees(employees)
+            # 保存工资记录
+            record_save_success = save_salary_records(records)
+            
+            if emp_save_success and record_save_success:
+                # 验证保存结果
+                saved_employees = load_employees()
+                saved_records = load_salary_records()
+                
+                print(f"验证结果 - 员工数: {len(saved_employees)}, 工资记录数: {len(saved_records)}")
+                
+                flash(f'成功上传 {processed_count} 条工资记录，月份：{month}')
+                flash(f'数据存储路径: {DATA_DIR}')
+            else:
+                flash(f'上传失败：数据保存过程中出现错误')
+                flash(f'数据存储路径: {DATA_DIR}')
+        except Exception as e:
+            flash(f'保存数据失败：{str(e)}')
+            print(f"上传过程异常: {str(e)}")
         
     except Exception as e:
         flash(f'上传失败：{str(e)}')

@@ -3,45 +3,137 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工资管理 - 工资查询系统</title>
+    <title>管理员后台 - 工资查询系统</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .month-picker {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        .month-picker select {
+            flex: 1;
+        }
+        .month-picker span {
+            color: var(--text-light);
+            font-size: 14px;
+        }
+    </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>工资管理</h1>
-            <p>上传工资Excel文件</p>
+    <div class="card" style="max-width: 520px;">
+        <div class="admin-header">
+            <div>
+                <h1>工资数据上传</h1>
+                <p class="admin-info">请上传Excel格式的工资表</p>
+            </div>
+            <a href="/logout" style="font-size: 14px; color: var(--error);">退出登录</a>
         </div>
 
         {% with messages = get_flashed_messages() %}
             {% if messages %}
                 <div class="flash-messages">
                     {% for message in messages %}
-                        <div class="flash-message">{{ message }}</div>
+                        {% if '成功' in message %}
+                            <div class="flash-message success">{{ message }}</div>
+                        {% elif '失败' in message or '错误' in message %}
+                            <div class="flash-message error">{{ message }}</div>
+                        {% else %}
+                            <div class="flash-message warning">{{ message }}</div>
+                        {% endif %}
                     {% endfor %}
                 </div>
             {% endif %}
         {% endwith %}
 
-        <form method="POST" action="/upload" enctype="multipart/form-data" class="query-form">
+        <form method="POST" action="/upload" enctype="multipart/form-data">
             <div class="form-group">
-                <label for="month">月份</label>
-                <input type="month" id="month" name="month" required>
+                <label>选择年月</label>
+                <div class="month-picker">
+                    <select id="year" name="year" required onchange="updateMonth()">
+                        <option value="">选择年份</option>
+                    </select>
+                    <span>年</span>
+                    <select id="month" name="month" required onchange="updateMonth()">
+                        <option value="">选择月份</option>
+                        <option value="01">1</option>
+                        <option value="02">2</option>
+                        <option value="03">3</option>
+                        <option value="04">4</option>
+                        <option value="05">5</option>
+                        <option value="06">6</option>
+                        <option value="07">7</option>
+                        <option value="08">8</option>
+                        <option value="09">9</option>
+                        <option value="10">10</option>
+                        <option value="11">11</option>
+                        <option value="12">12</option>
+                    </select>
+                    <span>月</span>
+                </div>
+                <input type="hidden" id="month_value" name="month_value" required>
             </div>
 
             <div class="form-group">
-                <label for="file">选择Excel文件</label>
-                <input type="file" id="file" name="file" accept=".xlsx,.xls" required>
-                <p class="help-text">Excel文件需要包含"姓名"和"银行卡号"列，其他列会自动识别为工资项目</p>
+                <label>上传文件</label>
+                <div class="file-input-wrapper">
+                    <input type="file" id="file" name="file" accept=".xlsx" required onchange="updateFileName(this)">
+                    <label for="file" class="file-input-label" id="fileLabel">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                        <span>点击或拖拽上传Excel文件</span>
+                        <span style="font-size: 12px; margin-top: 4px;">支持 .xlsx 格式</span>
+                    </label>
+                </div>
             </div>
 
             <button type="submit" class="btn">上传工资数据</button>
         </form>
 
         <div class="footer">
-            <a href="/logout" class="admin-link">退出登录</a>
-            <a href="/" class="admin-link" style="margin-left: 20px;">返回首页</a>
+            <a href="/">返回查询页面</a>
         </div>
     </div>
+
+    <script>
+        // 生成年份选项（从2020年到2030年）
+        const yearSelect = document.getElementById('year');
+        const currentYear = new Date().getFullYear();
+        for (let year = currentYear + 5; year >= 2020; year--) {
+            const option = document.createElement('option');
+            option.value = year;
+            option.textContent = year;
+            yearSelect.appendChild(option);
+        }
+        
+        // 设置默认值为当前年月
+        const now = new Date();
+        document.getElementById('year').value = now.getFullYear();
+        document.getElementById('month').value = String(now.getMonth() + 1).padStart(2, '0');
+        updateMonth();
+
+        function updateMonth() {
+            const year = document.getElementById('year').value;
+            const month = document.getElementById('month').value;
+            if (year && month) {
+                document.getElementById('month_value').value = `${year}-${month}`;
+            }
+        }
+
+        function updateFileName(input) {
+            const label = document.getElementById('fileLabel');
+            if (input.files && input.files[0]) {
+                const fileName = input.files[0].name;
+                label.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="color: var(--success);">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span style="color: var(--text);">${fileName}</span>
+                    <span style="font-size: 12px; margin-top: 4px; color: var(--success);">文件已选择</span>
+                `;
+            }
+        }
+    </script>
 </body>
 </html>

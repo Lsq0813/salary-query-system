@@ -7,17 +7,22 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <div class="container">
+    <div class="card">
         <div class="header">
+            <div class="logo">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+            </div>
             <h1>工资查询系统</h1>
-            <p>请输入您的姓名和银行卡号后6位进行查询</p>
+            <p>请输入您的信息查询工资明细</p>
         </div>
 
         {% with messages = get_flashed_messages() %}
             {% if messages %}
                 <div class="flash-messages">
                     {% for message in messages %}
-                        <div class="flash-message">{{ message }}</div>
+                        <div class="flash-message error">{{ message }}</div>
                     {% endfor %}
                 </div>
             {% endif %}
@@ -35,11 +40,32 @@
                        placeholder="请输入银行卡号后6位" maxlength="6" required>
             </div>
 
-            <button type="submit" class="btn">查询工资</button>
+            <div class="form-group">
+                <label for="month">选择月份</label>
+                <select id="month" name="month" required>
+                    <option value="">请选择月份</option>
+                    {% if available_months %}
+                        {% for month in available_months %}
+                            <option value="{{ month }}">{{ month[:4] }}年{{ month[5:7] }}月</option>
+                        {% endfor %}
+                    {% else %}
+                        <option value="" disabled>暂无可用月份</option>
+                    {% endif %}
+                </select>
+                {% if not available_months %}
+                    <p style="font-size: 12px; color: var(--text-light); margin-top: 6px;">
+                        提示：管理员尚未上传工资数据
+                    </p>
+                {% endif %}
+            </div>
+
+            <button type="submit" class="btn" {% if not available_months %}disabled style="opacity: 0.6; cursor: not-allowed;"{% endif %}>
+                查询工资
+            </button>
         </form>
 
         <div class="footer">
-            <a href="/admin" class="admin-link">管理员入口</a>
+            <a href="/admin">管理员入口</a>
         </div>
     </div>
 </body>
